@@ -1,12 +1,18 @@
+# 1. ใช้ Image หลักจาก Microsoft ที่ติดตั้ง Python และ dependencies ของ Playwright ไว้ครบถ้วนแล้ว
 FROM mcr.microsoft.com/playwright/python:v1.40.0-jammy
 
+# 2. กำหนด Working Directory ภายใน Container
 WORKDIR /app
 
+# 3. คัดลอกไฟล์ requirements.txt และทำการติดตั้ง Python packages
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
+# 4. คัดลอกโค้ดทั้งหมด (main.py, index.html ฯลฯ) เข้าไปใน Container
 COPY . .
 
+# 5. เปิด พอร์ต 8000 สำหรับสื่อสาร
 EXPOSE 8000
 
+# 6. คำสั่งรัน FastAPI ผ่าน Uvicorn
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
