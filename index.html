@@ -1,0 +1,685 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Audition Item Fashion Catalog - Created by PURIFICATIXN</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <style>
+        :root {
+            --primary-color: #ff4757;
+            --secondary-color: #2ed573;
+            --dark-color: #2f3542;
+            --light-bg: #f1f2f6;
+            --card-bg: #ffffff;
+            --text-color: #333333;
+            --border-radius: 12px;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Kanit', 'Prompt', sans-serif;
+        }
+
+        body {
+            background-color: var(--light-bg);
+            color: var(--text-color);
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+        }
+
+        header {
+            background: linear-gradient(135deg, #ff4757, #ff6b81);
+            color: white;
+            padding: 2.5rem 1rem 2rem;
+            text-align: center;
+            box-shadow: 0 4px 15px rgba(255, 71, 87, 0.3);
+            margin-bottom: 20px;
+            position: relative;
+        }
+
+        header h1 {
+            font-size: 2.2rem;
+            margin-bottom: 5px;
+            font-weight: 700;
+        }
+
+        header p {
+            font-size: 1rem;
+            opacity: 0.95;
+        }
+
+        .creator-badge {
+            display: inline-block;
+            margin-top: 8px;
+            background: rgba(0, 0, 0, 0.2);
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            letter-spacing: 0.5px;
+        }
+
+        .creator-badge i {
+            color: #ffda79;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 15px;
+            flex-grow: 1;
+            width: 100%;
+        }
+
+        /* Support / Donate Card */
+        .donate-card {
+            background: linear-gradient(135deg, #ffffff, #fff9e6);
+            border: 2px dashed #ffa502;
+            border-radius: var(--border-radius);
+            padding: 15px 20px;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 15px;
+            box-shadow: 0 4px 10px rgba(255, 165, 2, 0.15);
+        }
+
+        .donate-info {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .donate-info i {
+            font-size: 2rem;
+            color: #ffa502;
+        }
+
+        .donate-text h3 {
+            font-size: 1.05rem;
+            color: var(--dark-color);
+            margin-bottom: 3px;
+        }
+
+        .donate-text p {
+            font-size: 0.85rem;
+            color: #57606f;
+        }
+
+        .donate-pay {
+            background-color: #ffffff;
+            border: 1px solid #ffeaa7;
+            padding: 8px 16px;
+            border-radius: 25px;
+            font-size: 0.95rem;
+            font-weight: bold;
+            color: #d63031;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+        }
+
+        /* Control Panel / Filters */
+        .controls {
+            background: var(--card-bg);
+            padding: 20px;
+            border-radius: var(--border-radius);
+            box-shadow: 0 4px 10px rgba(0,0,0,0.05);
+            margin-bottom: 25px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .search-box {
+            flex: 1 1 300px;
+            position: relative;
+        }
+
+        .search-box input {
+            width: 100%;
+            padding: 12px 15px 12px 40px;
+            border: 2px solid #eccc68;
+            border-radius: 25px;
+            font-size: 1rem;
+            outline: none;
+            transition: 0.3s;
+        }
+
+        .search-box input:focus {
+            border-color: var(--primary-color);
+        }
+
+        .search-box i {
+            position: absolute;
+            left: 15px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: #ffa502;
+        }
+
+        .filter-group {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            flex: 2 1 400px;
+        }
+
+        .filter-group select {
+            padding: 10px 15px;
+            border: 1px solid #ced6e0;
+            border-radius: 8px;
+            background-color: white;
+            font-size: 0.95rem;
+            outline: none;
+            cursor: pointer;
+            flex: 1 1 120px;
+        }
+
+        .btn-scrape {
+            background-color: var(--secondary-color);
+            color: white;
+            border: none;
+            padding: 12px 20px;
+            border-radius: 25px;
+            font-size: 0.95rem;
+            cursor: pointer;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            box-shadow: 0 4px 10px rgba(46, 213, 115, 0.3);
+            transition: 0.2s;
+        }
+
+        .btn-scrape:hover {
+            background-color: #26af5f;
+            transform: translateY(-2px);
+        }
+
+        /* Progress Bar Section */
+        .progress-container {
+            display: none;
+            background: var(--card-bg);
+            padding: 15px 20px;
+            border-radius: var(--border-radius);
+            margin-bottom: 25px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.05);
+        }
+
+        .progress-bar-bg {
+            background-color: #e4e7eb;
+            height: 12px;
+            border-radius: 6px;
+            overflow: hidden;
+            margin-top: 10px;
+        }
+
+        .progress-bar-fill {
+            background: linear-gradient(90deg, #2ed573, #1e90ff);
+            height: 100%;
+            width: 0%;
+            transition: width 0.3s;
+        }
+
+        .progress-status {
+            font-size: 0.9rem;
+            color: #57606f;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        /* Items Grid */
+        .items-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+            gap: 20px;
+        }
+
+        .item-card {
+            background: var(--card-bg);
+            border-radius: var(--border-radius);
+            overflow: hidden;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+            transition: transform 0.2s, box-shadow 0.2s;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+        }
+
+        .item-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 20px rgba(0,0,0,0.12);
+        }
+
+        .item-badge {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            font-weight: bold;
+            color: white;
+            z-index: 2;
+        }
+
+        .badge-golden { background-color: #ff9f1a; }
+        .badge-gacha { background-color: #9b59b6; }
+        .badge-topup { background-color: #ff4757; }
+        .badge-star { background-color: #eccc68; color: #333; }
+        .badge-webshop { background-color: #3742fa; }
+        .badge-event { background-color: #2ed573; }
+        .badge-default { background-color: #747d8c; }
+
+        .img-container {
+            width: 100%;
+            height: 220px;
+            background-color: #f8f9fa;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 10px;
+            position: relative;
+        }
+
+        .img-container img {
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+        }
+
+        .item-info {
+            padding: 15px;
+            display: flex;
+            flex-direction: column;
+            flex-grow: 1;
+        }
+
+        .item-title {
+            font-size: 0.95rem;
+            font-weight: bold;
+            margin-bottom: 8px;
+            line-height: 1.4;
+            color: var(--dark-color);
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+            height: 2.7em;
+        }
+
+        .item-tags {
+            display: flex;
+            gap: 5px;
+            flex-wrap: wrap;
+            margin-bottom: 12px;
+        }
+
+        .tag {
+            font-size: 0.75rem;
+            background: #f1f2f6;
+            padding: 3px 8px;
+            border-radius: 4px;
+            color: #57606f;
+        }
+
+        .item-footer {
+            margin-top: auto;
+            border-top: 1px solid #f1f2f6;
+            padding-top: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .item-source-title {
+            font-size: 0.8rem;
+            color: #a4b0be;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 150px;
+        }
+
+        .btn-link {
+            color: var(--primary-color);
+            font-size: 0.85rem;
+            text-decoration: none;
+            font-weight: bold;
+        }
+
+        .btn-link:hover {
+            text-decoration: underline;
+        }
+
+        /* Pagination */
+        .pagination {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 10px;
+            margin-top: 35px;
+            margin-bottom: 35px;
+        }
+
+        .pagination button {
+            padding: 8px 16px;
+            border: 1px solid #ced6e0;
+            background: white;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+
+        .pagination button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .pagination button.active {
+            background-color: var(--primary-color);
+            color: white;
+            border-color: var(--primary-color);
+        }
+
+        .page-info {
+            font-size: 0.9rem;
+            color: #57606f;
+        }
+
+        .no-result {
+            text-align: center;
+            grid-column: 1 / -1;
+            padding: 50px 0;
+            color: #747d8c;
+        }
+
+        .no-result i {
+            font-size: 3rem;
+            margin-bottom: 10px;
+        }
+
+        /* Footer Section */
+        footer {
+            background-color: var(--dark-color);
+            color: #a4b0be;
+            text-align: center;
+            padding: 20px;
+            margin-top: auto;
+            font-size: 0.9rem;
+        }
+
+        footer strong {
+            color: #ff4757;
+            font-weight: bold;
+        }
+
+        footer i {
+            color: #ff4757;
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <h1><i class="fa-solid fa-shirt"></i> Audition Item Fashion Catalog</h1>
+        <p>คลังค้นหาไอเทมแฟชั่นและโปรโมชันเกม Audition Thailand</p>
+        <div class="creator-badge">
+            <i class="fa-solid fa-code"></i> Developed by <strong>PURIFICATIXN</strong>
+        </div>
+    </header>
+
+    <div class="container">
+        
+        <!-- Donate Card -->
+        <div class="donate-card">
+            <div class="donate-info">
+                <i class="fa-solid fa-mug-hot"></i>
+                <div class="donate-text">
+                    <h3>สนับสนุนเว็บบอร์ด & สนับสนุนค่ากาแฟผู้พัฒนา</h3>
+                    <p>หากชื่นชอบระบบ สามารถร่วมโดเนทสนับสนุนผู้พัฒนาได้ง่ายๆ ผ่าน PromptPay</p>
+                </div>
+            </div>
+            <div class="donate-pay">
+                <i class="fa-solid fa-qrcode"></i> PromptPay: <strong>0988920419 (เพิ่มพล)</strong>
+            </div>
+        </div>
+
+        <!-- Controls & Filters -->
+        <div class="controls">
+            <div class="search-box">
+                <i class="fa-solid fa-magnifying-glass"></i>
+                <input type="text" id="search-input" placeholder="ค้นหาชื่อไอเทม หรือ ชื่อโปรโมชัน...">
+            </div>
+
+            <div class="filter-group">
+                <select id="filter-category">
+                    <option value="ทั้งหมด">หมวดหมู่ทั้งหมด</option>
+                    <option value="ทรงผม">💇‍♂️ ทรงผม</option>
+                    <option value="ใบหน้า">😊 ใบหน้า</option>
+                    <option value="เสื้อ">👕 เสื้อ</option>
+                    <option value="กางเกง/กระโปรง">👖 กางเกง/กระโปรง</option>
+                    <option value="รองเท้า">👟 รองเท้า</option>
+                    <option value="เครื่องประดับ">🕊️ เครื่องประดับ/ปีก</option>
+                    <option value="เซตเสื้อผ้า">👗 เซตเสื้อผ้า</option>
+                    <option value="ชุดแฟชั่น">✨ ชุดแฟชั่นอื่นๆ</option>
+                </select>
+
+                <select id="filter-source">
+                    <option value="ทั้งหมด">โปรโมชันทั้งหมด</option>
+                    <option value="Golden Gacha">🌟 Golden Gacha</option>
+                    <option value="Gacha">🎰 Gacha</option>
+                    <option value="TopUp">💳 TopUp (เติมเงิน)</option>
+                    <option value="สอยดาว">⭐ สอยดาว</option>
+                    <option value="Web Shop">🛒 Web Shop</option>
+                    <option value="Bonus Time">🎁 Bonus Time</option>
+                    <option value="กิจกรรมฟรี">🎉 กิจกรรมฟรี</option>
+                    <option value="โปรโมชันพิเศษ">🔥 โปรโมชันพิเศษ</option>
+                </select>
+
+                <select id="filter-gender">
+                    <option value="ทั้งหมด">เพศทั้งหมด</option>
+                    <option value="ชาย">👨 ชาย</option>
+                    <option value="หญิง">👩 หญิง</option>
+                </select>
+
+                <select id="filter-sort">
+                    <option value="desc">🆕 ใหม่สุด -> เก่าสุด</option>
+                    <option value="asc">⏳ เก่าสุด -> ใหม่สุด</option>
+                </select>
+            </div>
+
+            <button class="btn-scrape" id="btn-start-scrape" onclick="startScraper()">
+                <i class="fa-solid fa-rotate"></i> อัปเดตข้อมูลเว็บ
+            </button>
+        </div>
+
+        <!-- Real-time Progress Section -->
+        <div class="progress-container" id="progress-container">
+            <div class="progress-status">
+                <span id="progress-text">กำลังเตรียมระบบ...</span>
+                <span id="progress-count">พบ 0 ไอเทม</span>
+            </div>
+            <div class="progress-bar-bg">
+                <div class="progress-bar-fill" id="progress-bar"></div>
+            </div>
+        </div>
+
+        <!-- Items Display Grid -->
+        <div class="items-grid" id="items-grid">
+            <!-- Dynamic Content Load Here -->
+        </div>
+
+        <!-- Pagination -->
+        <div class="pagination" id="pagination">
+            <button id="btn-prev" onclick="changePage(-1)"><i class="fa-solid fa-chevron-left"></i> ก่อนหน้า</button>
+            <span class="page-info" id="page-info">หน้า 1 / 1</span>
+            <button id="btn-next" onclick="changePage(1)">ถัดไป <i class="fa-solid fa-chevron-right"></i></button>
+        </div>
+
+    </div>
+
+    <!-- Footer Section -->
+    <footer>
+        <p>Created with <i class="fa-solid fa-heart"></i> by <strong>PURIFICATIXN</strong> | Support via PromptPay: 0988920419 (เพิ่มพล)</p>
+    </footer>
+
+    <script>
+        let currentPage = 1;
+        const limit = 20;
+        let totalPages = 1;
+
+        // Fetch Items Data from Backend API
+        async function fetchItems() {
+            const search = document.getElementById('search-input').value.trim();
+            const category = document.getElementById('filter-category').value;
+            const source = document.getElementById('filter-source').value;
+            const gender = document.getElementById('filter-gender').value;
+            const sort = document.getElementById('filter-sort').value;
+
+            const queryParams = new URLSearchParams({
+                search: search,
+                category: category,
+                source: source,
+                gender: gender,
+                sort: sort,
+                page: currentPage,
+                limit: limit
+            });
+
+            try {
+                const response = await fetch(`/api/items?${queryParams.toString()}`);
+                const data = await response.json();
+                
+                renderItems(data.items);
+                totalPages = data.totalPages || 1;
+                updatePagination(data.page, totalPages, data.total);
+            } catch (error) {
+                console.error('Error fetching items:', error);
+            }
+        }
+
+        // Render Cards inside Grid
+        function renderItems(items) {
+            const grid = document.getElementById('items-grid');
+            grid.innerHTML = '';
+
+            if (!items || items.length === 0) {
+                grid.innerHTML = `
+                    <div class="no-result">
+                        <i class="fa-solid fa-box-open"></i>
+                        <p>ไม่พบข้อมูลไอเทมที่คุณค้นหา</p>
+                    </div>
+                `;
+                return;
+            }
+
+            items.forEach(item => {
+                const badgeClass = getBadgeClass(item.sourceType);
+                const cardHtml = `
+                    <div class="item-card">
+                        <span class="item-badge ${badgeClass}">${item.sourceType}</span>
+                        <div class="img-container">
+                            <img src="${item.img}" alt="${item.name}" loading="lazy" onerror="this.src='https://via.placeholder.com/200?text=No+Image'">
+                        </div>
+                        <div class="item-info">
+                            <div class="item-title" title="${item.name}">${item.name}</div>
+                            <div class="item-tags">
+                                <span class="tag"><i class="fa-solid fa-tag"></i> ${item.category}</span>
+                                <span class="tag"><i class="fa-solid fa-user"></i> ${item.gender}</span>
+                            </div>
+                            <div class="item-footer">
+                                <span class="item-source-title" title="${item.detail || ''}">${item.detail || '-'}</span>
+                                ${item.url ? `<a href="${item.url}" target="_blank" class="btn-link">รายละเอียด <i class="fa-solid fa-external-link"></i></a>` : ''}
+                            </div>
+                        </div>
+                    </div>
+                `;
+                grid.insertAdjacentHTML('beforeend', cardHtml);
+            });
+        }
+
+        function getBadgeClass(sourceType) {
+            switch (sourceType) {
+                case 'Golden Gacha': return 'badge-golden';
+                case 'Gacha': return 'badge-gacha';
+                case 'TopUp': return 'badge-topup';
+                case 'สอยดาว': return 'badge-star';
+                case 'Web Shop': return 'badge-webshop';
+                case 'กิจกรรมฟรี': return 'badge-event';
+                default: return 'badge-default';
+            }
+        }
+
+        function updatePagination(page, total, totalRecords) {
+            document.getElementById('page-info').innerText = `หน้า ${page} / ${total} (รวม ${totalRecords} รายการ)`;
+            document.getElementById('btn-prev').disabled = (page <= 1);
+            document.getElementById('btn-next').disabled = (page >= total);
+        }
+
+        function changePage(direction) {
+            currentPage += direction;
+            fetchItems();
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        // Real-time EventSource Progress for Scraping
+        function startScraper() {
+            const btn = document.getElementById('btn-start-scrape');
+            const progressContainer = document.getElementById('progress-container');
+            const progressBar = document.getElementById('progress-bar');
+            const progressText = document.getElementById('progress-text');
+            const progressCount = document.getElementById('progress-count');
+
+            btn.disabled = true;
+            btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> กำลังสแกน...`;
+            progressContainer.style.display = 'block';
+            progressBar.style.width = '10%';
+
+            const evtSource = new EventSource('/api/scrape-stream');
+
+            evtSource.onmessage = function(event) {
+                const data = JSON.parse(event.data);
+                
+                progressText.innerText = data.message;
+                progressCount.innerText = `ดึงได้แล้ว ${data.total_items} รายการ`;
+                
+                if (data.status === 'progress') {
+                    progressBar.style.width = '60%';
+                } else if (data.status === 'completed') {
+                    progressBar.style.width = '100%';
+                    btn.disabled = false;
+                    btn.innerHTML = `<i class="fa-solid fa-rotate"></i> อัปเดตข้อมูลเว็บ`;
+                    evtSource.close();
+                    fetchItems();
+                }
+            };
+
+            evtSource.onerror = function() {
+                btn.disabled = false;
+                btn.innerHTML = `<i class="fa-solid fa-rotate"></i> อัปเดตข้อมูลเว็บ`;
+                evtSource.close();
+            };
+        }
+
+        // Event Listeners for Filters
+        document.getElementById('search-input').addEventListener('input', () => { currentPage = 1; fetchItems(); });
+        document.getElementById('filter-category').addEventListener('change', () => { currentPage = 1; fetchItems(); });
+        document.getElementById('filter-source').addEventListener('change', () => { currentPage = 1; fetchItems(); });
+        document.getElementById('filter-gender').addEventListener('change', () => { currentPage = 1; fetchItems(); });
+        document.getElementById('filter-sort').addEventListener('change', () => { currentPage = 1; fetchItems(); });
+
+        // Initial Load
+        fetchItems();
+    </script>
+</body>
+</html>
