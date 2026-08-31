@@ -1,5 +1,5 @@
 fastapi
 uvicorn
-playwright
+playwright==1.40.0
 apscheduler
 psycopg2-binary
