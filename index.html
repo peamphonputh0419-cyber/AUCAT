@@ -272,12 +272,15 @@
             z-index: 2;
         }
 
+        /* Badge Styles */
         .badge-golden { background-color: #ff9f1a; }
         .badge-gacha { background-color: #9b59b6; }
         .badge-topup { background-color: #ff4757; }
         .badge-star { background-color: #eccc68; color: #333; }
         .badge-webshop { background-color: #3742fa; }
         .badge-event { background-color: #2ed573; }
+        .badge-daily { background-color: #00cec9; } /* สีหมวด Daily Login */
+        .badge-refill { background-color: #ff6b6b; } /* สีหมวด Refill */
         .badge-default { background-color: #747d8c; }
 
         .img-container {
@@ -476,6 +479,8 @@
 
                 <select id="filter-source">
                     <option value="ทั้งหมด">โปรโมชันทั้งหมด</option>
+                    <option value="Daily Login">📅 Daily Login</option>
+                    <option value="Refill">🔄 Refill (เติมเงินสะสม)</option>
                     <option value="Golden Gacha">🌟 Golden Gacha</option>
                     <option value="Gacha">🎰 Gacha</option>
                     <option value="TopUp">💳 TopUp (เติมเงิน)</option>
@@ -610,6 +615,8 @@
 
         function getBadgeClass(sourceType) {
             switch (sourceType) {
+                case 'Daily Login': return 'badge-daily';
+                case 'Refill': return 'badge-refill';
                 case 'Golden Gacha': return 'badge-golden';
                 case 'Gacha': return 'badge-gacha';
                 case 'TopUp': return 'badge-topup';
