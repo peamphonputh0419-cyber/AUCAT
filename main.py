@@ -11,7 +11,7 @@ from playwright.sync_api import sync_playwright
 
 DB_NAME = "audition_fashion.db"
 progress_queue = asyncio.Queue()
-is_scraping_running = False  # ป้องกันไม่ให้รันงานซ้อนกันหากสแกนรอบเดิมยังไม่เสร็จ
+is_scraping_running = False  # ป้องกันไม่ให้รันการสแกนซ้อนกัน
 
 
 def init_db():
@@ -35,7 +35,7 @@ def init_db():
 
 
 def run_hourly_scraping_job():
-    """ฟังก์ชัน Background Job สำหรับทำงานอัตโนมัติ"""
+    """ฟังก์ชัน Background Job สำหรับสแกนข้อมูลอัตโนมัติ"""
     global is_scraping_running
     if is_scraping_running:
         print("⏳ [Background Job] สแกนรอบก่อนหน้านี้ยังไม่เสร็จ ข้ามรอบนี้ไป...")
@@ -47,29 +47,29 @@ def run_hourly_scraping_job():
     except RuntimeError:
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
-    
+
     run_full_scraper_sync(loop)
     print("✅ [Background Job] ดึงข้อมูลเรียบร้อยแล้ว!")
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # 1. เริ่มต้นฐานข้อมูล
+    # 1. เริ่มต้นระบบและสร้าง Database
     init_db()
-    
-    # 2. ตั้งค่า Scheduler สำหรับรันทุกๆ 1 ชั่วโมง
+
+    # 2. ตั้งเวลาสแกนอัตโนมัติทุกๆ 1 ชั่วโมง
     scheduler = BackgroundScheduler()
-    scheduler.add_job(run_hourly_scraping_job, 'interval', hours=1)
+    scheduler.add_job(run_hourly_scraping_job, "interval", hours=1)
     scheduler.start()
-    
-    # 3. รันการสแกนทันที 1 ครั้งเมื่อเริ่มเปิดเซิร์ฟเวอร์ (Startup Check)
-    loop = asyncio.get_event_loop()
-    loop.run_in_executor(None, run_hourly_scraping_job)
-    
+
+    # 3. รันสแกนทันที 1 รอบเมื่อ Server เริ่มเปิด (Startup Check)
+    asyncio.create_task(asyncio.to_thread(run_hourly_scraping_job))
+
     yield
-    
-    # Shutdown System
+
+    # Shutdown Scheduler เมื่อปิด Server
     scheduler.shutdown()
+
 
 app = FastAPI(title="Audition Item Catalog API", lifespan=lifespan)
 
@@ -372,15 +372,24 @@ def run_full_scraper_sync(loop=None):
     global is_scraping_running
     is_scraping_running = True
     total_saved = 0
-    
+
     categories = [
-        ("Promotion", "https://audition.playpark.com/th-th/category/news/promotion/"),
-        ("Event", "https://audition.playpark.com/th-th/category/news/event/"),
+        (
+            "Promotion",
+            "https://audition.playpark.com/th-th/category/news/promotion/",
+        ),
+        (
+            "Event",
+            "https://audition.playpark.com/th-th/category/news/event/",
+        ),
     ]
 
     try:
         with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
+            browser = p.chromium.launch(
+                headless=True,
+                args=["--no-sandbox", "--disable-setuid-sandbox"],
+            )
             page = browser.new_page()
 
             for cat_name, base_url in categories:
@@ -407,7 +416,9 @@ def run_full_scraper_sync(loop=None):
 
                     try:
                         response = page.goto(
-                            target_url, wait_until="domcontentloaded", timeout=30000
+                            target_url,
+                            wait_until="domcontentloaded",
+                            timeout=30000,
                         )
                         if response and response.status == 404:
                             break
@@ -433,7 +444,9 @@ def run_full_scraper_sync(loop=None):
                             break
 
                         for href, title in news_links:
-                            saved = scrape_article_detail_sync(page, href, title)
+                            saved = scrape_article_detail_sync(
+                                page, href, title
+                            )
                             total_saved += saved
                             if loop:
                                 asyncio.run_coroutine_threadsafe(
@@ -554,8 +567,10 @@ async def scrape_stream():
     global is_scraping_running
     if is_scraping_running:
         return StreamingResponse(
-            iter([f"data: {json.dumps({'status': 'progress', 'message': 'ระบบกำลังทำการสแกนอยู่แล้ว...'}, ensure_ascii=False)}\n\n"]),
-            media_type="text/event-stream"
+            iter([
+                f"data: {json.dumps({'status': 'progress', 'message': 'ระบบกำลังทำการสแกนอยู่แล้ว...'}, ensure_ascii=False)}\n\n"
+            ]),
+            media_type="text/event-stream",
         )
 
     loop = asyncio.get_event_loop()
