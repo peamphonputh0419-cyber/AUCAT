@@ -2,20 +2,12 @@ import asyncio
 import json
 import sqlite3
 import urllib.parse
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse
+from apscheduler.schedulers.background import BackgroundScheduler
 from playwright.sync_api import sync_playwright
-
-app = FastAPI(title="Audition Item Catalog API")
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
 
 DB_NAME = "audition_fashion.db"
 progress_queue = asyncio.Queue()
@@ -41,9 +33,43 @@ def init_db():
     conn.close()
 
 
-@app.on_event("startup")
-def startup_event():
+def run_daily_scraping_job():
+    """ฟังก์ชัน Background Job สำหรับทำงานอัตโนมัติตามช่วงเวลาที่ตั้งไว้"""
+    print("⏰ [Cron Job] กำลังเริ่มการดึงข้อมูลโปรโมชันและกิจกรรมประจำวัน...")
+    try:
+        loop = asyncio.get_event_loop()
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+    
+    run_full_scraper_sync(loop)
+    print("✅ [Cron Job] ดึงข้อมูลประจำวันเรียบร้อยแล้ว!")
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Setup System
     init_db()
+    
+    # ตั้งค่า Scheduler ให้รันสแครปเปอร์อัตโนมัติทุกวัน (กำหนดเวลารันตอน 03:00 น.)
+    scheduler = BackgroundScheduler()
+    scheduler.add_job(run_daily_scraping_job, 'cron', hour=3, minute=0)
+    scheduler.start()
+    
+    yield
+    
+    # Shutdown System
+    scheduler.shutdown()
+
+app = FastAPI(title="Audition Item Catalog API", lifespan=lifespan)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 def classify_source_type(text: str) -> str:
@@ -332,20 +358,21 @@ def scrape_article_detail_sync(page, article_url: str, article_title: str):
     return saved_count
 
 
-def run_full_scraper_sync(loop):
+def run_full_scraper_sync(loop=None):
     total_saved = 0
+    
+    # ดึงข้อมูลจาก 2 หมวดหลัก: Promotion และ Event
     categories = [
-        "https://audition.playpark.com/th-th/category/news/promotion/",
-        "https://audition.playpark.com/th-th/category/news/event/",
+        ("Promotion", "https://audition.playpark.com/th-th/category/news/promotion/"),
+        ("Event", "https://audition.playpark.com/th-th/category/news/event/"),
     ]
 
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
         page = browser.new_page()
 
-        for base_url in categories:
+        for cat_name, base_url in categories:
             page_num = 1
-            cat_name = "Promotion" if "promotion" in base_url else "Event"
 
             while True:
                 target_url = (
@@ -354,16 +381,17 @@ def run_full_scraper_sync(loop):
                     else f"{base_url}page/{page_num}/"
                 )
 
-                asyncio.run_coroutine_threadsafe(
-                    progress_queue.put({
-                        "status": "progress",
-                        "category": cat_name,
-                        "page": page_num,
-                        "message": f"กำลังสแกนหมวด {cat_name} หน้าที่ {page_num}...",
-                        "total_items": total_saved,
-                    }),
-                    loop,
-                )
+                if loop:
+                    asyncio.run_coroutine_threadsafe(
+                        progress_queue.put({
+                            "status": "progress",
+                            "category": cat_name,
+                            "page": page_num,
+                            "message": f"กำลังสแกนหมวด {cat_name} หน้าที่ {page_num}...",
+                            "total_items": total_saved,
+                        }),
+                        loop,
+                    )
 
                 try:
                     response = page.goto(
@@ -395,16 +423,17 @@ def run_full_scraper_sync(loop):
                     for href, title in news_links:
                         saved = scrape_article_detail_sync(page, href, title)
                         total_saved += saved
-                        asyncio.run_coroutine_threadsafe(
-                            progress_queue.put({
-                                "status": "progress",
-                                "category": cat_name,
-                                "page": page_num,
-                                "message": f"ดึงข้อมูล: {title[:25]}... (+{saved})",
-                                "total_items": total_saved,
-                            }),
-                            loop,
-                        )
+                        if loop:
+                            asyncio.run_coroutine_threadsafe(
+                                progress_queue.put({
+                                    "status": "progress",
+                                    "category": cat_name,
+                                    "page": page_num,
+                                    "message": f"ดึงข้อมูล: {title[:25]}... (+{saved})",
+                                    "total_items": total_saved,
+                                }),
+                                loop,
+                            )
 
                     page_num += 1
                 except Exception as e:
@@ -413,14 +442,15 @@ def run_full_scraper_sync(loop):
 
         browser.close()
 
-    asyncio.run_coroutine_threadsafe(
-        progress_queue.put({
-            "status": "completed",
-            "message": "สแกนข้อมูลครบทุกหน้าสมบูรณ์!",
-            "total_items": total_saved,
-        }),
-        loop,
-    )
+    if loop:
+        asyncio.run_coroutine_threadsafe(
+            progress_queue.put({
+                "status": "completed",
+                "message": "สแกนข้อมูลโปรโมชันและกิจกรรมครบทุกหน้าแล้ว!",
+                "total_items": total_saved,
+            }),
+            loop,
+        )
 
 
 @app.get("/")
@@ -475,7 +505,6 @@ def get_items(
     cursor.execute(count_query, params)
     total_items = cursor.fetchone()[0]
 
-    # แก้ไขการสลับเรียงลำดับ: desc สั่ง ASC เพื่อดึงรายการใหม่ขึ้นก่อนตามโครงสร้าง ID ของ DB
     order_direction = "ASC" if sort.lower() == "desc" else "DESC"
 
     offset = (page - 1) * limit
