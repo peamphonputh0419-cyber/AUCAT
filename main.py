@@ -11,6 +11,7 @@ from playwright.sync_api import sync_playwright
 
 DB_NAME = "audition_fashion.db"
 progress_queue = asyncio.Queue()
+is_scraping_running = False  # ป้องกันไม่ให้รันงานซ้อนกันหากสแกนรอบเดิมยังไม่เสร็จ
 
 
 def init_db():
@@ -33,9 +34,14 @@ def init_db():
     conn.close()
 
 
-def run_daily_scraping_job():
-    """ฟังก์ชัน Background Job สำหรับทำงานอัตโนมัติตามช่วงเวลาที่ตั้งไว้"""
-    print("⏰ [Cron Job] กำลังเริ่มการดึงข้อมูลโปรโมชันและกิจกรรมประจำวัน...")
+def run_hourly_scraping_job():
+    """ฟังก์ชัน Background Job สำหรับทำงานอัตโนมัติ"""
+    global is_scraping_running
+    if is_scraping_running:
+        print("⏳ [Background Job] สแกนรอบก่อนหน้านี้ยังไม่เสร็จ ข้ามรอบนี้ไป...")
+        return
+
+    print("⏰ [Background Job] กำลังเริ่มดึงข้อมูลโปรโมชันและกิจกรรม...")
     try:
         loop = asyncio.get_event_loop()
     except RuntimeError:
@@ -43,18 +49,22 @@ def run_daily_scraping_job():
         asyncio.set_event_loop(loop)
     
     run_full_scraper_sync(loop)
-    print("✅ [Cron Job] ดึงข้อมูลประจำวันเรียบร้อยแล้ว!")
+    print("✅ [Background Job] ดึงข้อมูลเรียบร้อยแล้ว!")
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Setup System
+    # 1. เริ่มต้นฐานข้อมูล
     init_db()
     
-    # ตั้งค่า Scheduler ให้รันสแครปเปอร์อัตโนมัติทุกวัน (กำหนดเวลารันตอน 03:00 น.)
+    # 2. ตั้งค่า Scheduler สำหรับรันทุกๆ 1 ชั่วโมง
     scheduler = BackgroundScheduler()
-    scheduler.add_job(run_daily_scraping_job, 'cron', hour=3, minute=0)
+    scheduler.add_job(run_hourly_scraping_job, 'interval', hours=1)
     scheduler.start()
+    
+    # 3. รันการสแกนทันที 1 ครั้งเมื่อเริ่มเปิดเซิร์ฟเวอร์ (Startup Check)
+    loop = asyncio.get_event_loop()
+    loop.run_in_executor(None, run_hourly_scraping_job)
     
     yield
     
@@ -359,94 +369,98 @@ def scrape_article_detail_sync(page, article_url: str, article_title: str):
 
 
 def run_full_scraper_sync(loop=None):
+    global is_scraping_running
+    is_scraping_running = True
     total_saved = 0
     
-    # ดึงข้อมูลจาก 2 หมวดหลัก: Promotion และ Event
     categories = [
         ("Promotion", "https://audition.playpark.com/th-th/category/news/promotion/"),
         ("Event", "https://audition.playpark.com/th-th/category/news/event/"),
     ]
 
-    with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
-        page = browser.new_page()
+    try:
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=True)
+            page = browser.new_page()
 
-        for cat_name, base_url in categories:
-            page_num = 1
+            for cat_name, base_url in categories:
+                page_num = 1
 
-            while True:
-                target_url = (
-                    base_url
-                    if page_num == 1
-                    else f"{base_url}page/{page_num}/"
-                )
-
-                if loop:
-                    asyncio.run_coroutine_threadsafe(
-                        progress_queue.put({
-                            "status": "progress",
-                            "category": cat_name,
-                            "page": page_num,
-                            "message": f"กำลังสแกนหมวด {cat_name} หน้าที่ {page_num}...",
-                            "total_items": total_saved,
-                        }),
-                        loop,
+                while True:
+                    target_url = (
+                        base_url
+                        if page_num == 1
+                        else f"{base_url}page/{page_num}/"
                     )
 
-                try:
-                    response = page.goto(
-                        target_url, wait_until="domcontentloaded", timeout=30000
-                    )
-                    if response and response.status == 404:
+                    if loop:
+                        asyncio.run_coroutine_threadsafe(
+                            progress_queue.put({
+                                "status": "progress",
+                                "category": cat_name,
+                                "page": page_num,
+                                "message": f"กำลังสแกนหมวด {cat_name} หน้าที่ {page_num}...",
+                                "total_items": total_saved,
+                            }),
+                            loop,
+                        )
+
+                    try:
+                        response = page.goto(
+                            target_url, wait_until="domcontentloaded", timeout=30000
+                        )
+                        if response and response.status == 404:
+                            break
+
+                        articles = page.query_selector_all(
+                            "article a, .post a, .entry-title a"
+                        )
+                        if not articles:
+                            break
+
+                        news_links = []
+                        for a in articles:
+                            href = a.get_attribute("href")
+                            title = a.inner_text().strip()
+                            if (
+                                href
+                                and len(title) > 5
+                                and href not in [x[0] for x in news_links]
+                            ):
+                                news_links.append((href, title))
+
+                        if not news_links:
+                            break
+
+                        for href, title in news_links:
+                            saved = scrape_article_detail_sync(page, href, title)
+                            total_saved += saved
+                            if loop:
+                                asyncio.run_coroutine_threadsafe(
+                                    progress_queue.put({
+                                        "status": "progress",
+                                        "category": cat_name,
+                                        "page": page_num,
+                                        "message": f"ดึงข้อมูล: {title[:25]}... (+{saved})",
+                                        "total_items": total_saved,
+                                    }),
+                                    loop,
+                                )
+
+                        page_num += 1
+                    except Exception as e:
+                        print(f"⚠️ Error: {e}")
                         break
 
-                    articles = page.query_selector_all(
-                        "article a, .post a, .entry-title a"
-                    )
-                    if not articles:
-                        break
-
-                    news_links = []
-                    for a in articles:
-                        href = a.get_attribute("href")
-                        title = a.inner_text().strip()
-                        if (
-                            href
-                            and len(title) > 5
-                            and href not in [x[0] for x in news_links]
-                        ):
-                            news_links.append((href, title))
-
-                    if not news_links:
-                        break
-
-                    for href, title in news_links:
-                        saved = scrape_article_detail_sync(page, href, title)
-                        total_saved += saved
-                        if loop:
-                            asyncio.run_coroutine_threadsafe(
-                                progress_queue.put({
-                                    "status": "progress",
-                                    "category": cat_name,
-                                    "page": page_num,
-                                    "message": f"ดึงข้อมูล: {title[:25]}... (+{saved})",
-                                    "total_items": total_saved,
-                                }),
-                                loop,
-                            )
-
-                    page_num += 1
-                except Exception as e:
-                    print(f"⚠️ Error: {e}")
-                    break
-
-        browser.close()
+            browser.close()
+    finally:
+        is_scraping_running = False
 
     if loop:
         asyncio.run_coroutine_threadsafe(
             progress_queue.put({
                 "status": "completed",
-                "message": "สแกนข้อมูลโปรโมชันและกิจกรรมครบทุกหน้าแล้ว!",
+                "message": "สแกนข้อมูลโปรโมชันและกิจกรรมเรียบร้อยแล้ว!",
                 "total_items": total_saved,
             }),
             loop,
@@ -537,6 +551,13 @@ def get_items(
 
 @app.get("/api/scrape-stream")
 async def scrape_stream():
+    global is_scraping_running
+    if is_scraping_running:
+        return StreamingResponse(
+            iter([f"data: {json.dumps({'status': 'progress', 'message': 'ระบบกำลังทำการสแกนอยู่แล้ว...'}, ensure_ascii=False)}\n\n"]),
+            media_type="text/event-stream"
+        )
+
     loop = asyncio.get_event_loop()
     loop.run_in_executor(None, run_full_scraper_sync, loop)
 
