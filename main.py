@@ -83,9 +83,42 @@ app.add_middleware(
 
 
 def classify_source_type(text: str) -> str:
+    """จำแนกหมวดหมู่ที่มาของไอเทม (เพิ่ม Daily Login และ Refill)"""
     text = text.lower()
 
+    # 1. Daily Login (กิจกรรมล็อกอินรายวัน / เช็คชื่อ)
     if any(
+        k in text
+        for k in [
+            "daily login",
+            "daily_login",
+            "daily",
+            "login",
+            "เช็คชื่อ",
+            "รายวัน",
+            "ล็อกอินรายวัน",
+            "เข้าเกมประจำวัน",
+            "เข้าเกมรับฟรี",
+        ]
+    ):
+        return "Daily Login"
+
+    # 2. Refill (โปรโมชัน Refill / รีฟิล)
+    elif any(
+        k in text
+        for k in [
+            "refill",
+            "re-fill",
+            "รีฟิล",
+            "เติมเงินสะสม",
+            "first refill",
+            "refill bonus",
+        ]
+    ):
+        return "Refill"
+
+    # 3. Golden Gacha
+    elif any(
         k in text
         for k in [
             "golden gacha",
@@ -97,6 +130,8 @@ def classify_source_type(text: str) -> str:
         ]
     ):
         return "Golden Gacha"
+
+    # 4. Gacha
     elif any(
         k in text
         for k in [
@@ -109,11 +144,14 @@ def classify_source_type(text: str) -> str:
         ]
     ):
         return "Gacha"
+
+    # 5. สอยดาว
     elif any(
-        k in text
-        for k in ["สอยดาว", "หมุนดาว", "สุ่มดาว", "star promotion"]
+        k in text for k in ["สอยดาว", "หมุนดาว", "สุ่มดาว", "star promotion"]
     ):
         return "สอยดาว"
+
+    # 6. TopUp (เติมเงินประเภทอื่นๆ)
     elif any(
         k in text
         for k in [
@@ -123,11 +161,11 @@ def classify_source_type(text: str) -> str:
             "บัตรเติมเงิน",
             "สะสมยอดเติม",
             "โปรเติม",
-            "refill",
-            "first refill",
         ]
     ):
         return "TopUp"
+
+    # 7. Bonus Time
     elif any(
         k in text
         for k in [
@@ -141,6 +179,8 @@ def classify_source_type(text: str) -> str:
         ]
     ):
         return "Bonus Time"
+
+    # 8. Web Shop
     elif any(
         k in text
         for k in [
@@ -155,17 +195,10 @@ def classify_source_type(text: str) -> str:
         ]
     ):
         return "Web Shop"
+
+    # 9. กิจกรรมฟรี
     elif any(
-        k in text
-        for k in [
-            "กิจกรรม",
-            "event",
-            "แจกฟรี",
-            "ล็อกอิน",
-            "login",
-            "สะสมรอบเต้น",
-            "เต้นแลก",
-        ]
+        k in text for k in ["กิจกรรม", "event", "แจกฟรี", "สะสมรอบเต้น", "เต้นแลก"]
     ):
         return "กิจกรรมฟรี"
 
@@ -217,12 +250,12 @@ def scrape_article_detail_sync(page, article_url: str, article_title: str):
 
     source_type = classify_source_type(f"{article_title} {article_url}")
 
+    # ปรับปรุงคำขยะ ไม่ให้กรองคำว่า login หรือ refill ออกไป
     junk_keywords = [
         "download",
         "register",
         "client",
         "button",
-        "btn",
         "banner",
         "logo",
         "icon",
@@ -249,13 +282,10 @@ def scrape_article_detail_sync(page, article_url: str, article_title: str):
         page.goto(article_url, wait_until="domcontentloaded", timeout=25000)
         page.wait_for_timeout(1000)
 
+        # เพิ่ม Selector ให้ดึงรูปจากตารางกิจกรรม Daily Login / Refill ได้ทั่วถึงขึ้น
         images = page.query_selector_all(
-            ".entry-content table img, .post-content table img, article table img"
+            ".entry-content table img, .post-content table img, article table img, .entry-content .aligncenter img, .post-content img"
         )
-        if not images:
-            images = page.query_selector_all(
-                ".entry-content img, .post-content img"
-            )
 
         item_count = 0
         for img in images:
@@ -536,7 +566,6 @@ def get_items(
     cursor.execute(count_query, params)
     total_items = cursor.fetchone()[0]
 
-    # 📌 แก้ไขจุดนี้: desc คือ DESC (เอา ID ล่าสุดขึ้นก่อน), asc คือ ASC
     order_direction = "DESC" if sort.lower() == "desc" else "ASC"
 
     offset = (page - 1) * limit
