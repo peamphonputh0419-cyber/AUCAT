@@ -110,7 +110,8 @@ def classify_source_type(text: str) -> str:
     ):
         return "Gacha"
     elif any(
-        k in text for k in ["สอยดาว", "หมุนดาว", "สุ่มดาว", "star promotion"]
+        k in text
+        for k in ["สอยดาว", "หมุนดาว", "สุ่มดาว", "star promotion"]
     ):
         return "สอยดาว"
     elif any(
@@ -410,6 +411,7 @@ def run_full_scraper_sync(loop=None):
                                 "page": page_num,
                                 "message": f"กำลังสแกนหมวด {cat_name} หน้าที่ {page_num}...",
                                 "total_items": total_saved,
+                                "total": total_saved,
                             }),
                             loop,
                         )
@@ -456,6 +458,7 @@ def run_full_scraper_sync(loop=None):
                                         "page": page_num,
                                         "message": f"ดึงข้อมูล: {title[:25]}... (+{saved})",
                                         "total_items": total_saved,
+                                        "total": total_saved,
                                     }),
                                     loop,
                                 )
@@ -475,6 +478,7 @@ def run_full_scraper_sync(loop=None):
                 "status": "completed",
                 "message": "สแกนข้อมูลโปรโมชันและกิจกรรมเรียบร้อยแล้ว!",
                 "total_items": total_saved,
+                "total": total_saved,
             }),
             loop,
         )
@@ -532,7 +536,8 @@ def get_items(
     cursor.execute(count_query, params)
     total_items = cursor.fetchone()[0]
 
-    order_direction = "ASC" if sort.lower() == "desc" else "DESC"
+    # 📌 แก้ไขจุดนี้: desc คือ DESC (เอา ID ล่าสุดขึ้นก่อน), asc คือ ASC
+    order_direction = "DESC" if sort.lower() == "desc" else "ASC"
 
     offset = (page - 1) * limit
     query += f" ORDER BY id {order_direction} LIMIT ? OFFSET ?"
@@ -568,7 +573,7 @@ async def scrape_stream():
     if is_scraping_running:
         return StreamingResponse(
             iter([
-                f"data: {json.dumps({'status': 'progress', 'message': 'ระบบกำลังทำการสแกนอยู่แล้ว...'}, ensure_ascii=False)}\n\n"
+                f"data: {json.dumps({'status': 'progress', 'message': 'ระบบกำลังทำการสแกนอยู่แล้ว...', 'total_items': 0, 'total': 0}, ensure_ascii=False)}\n\n"
             ]),
             media_type="text/event-stream",
         )
