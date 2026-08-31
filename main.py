@@ -1,11 +1,13 @@
 import asyncio
 import json
+import os
+import re
 import sqlite3
 import urllib.parse
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Query
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from apscheduler.schedulers.background import BackgroundScheduler
 from playwright.sync_api import sync_playwright
 
@@ -14,9 +16,18 @@ progress_queue = asyncio.Queue()
 is_scraping_running = False  # ป้องกันไม่ให้รันการสแกนซ้อนกัน
 
 
-def init_db():
+def get_db_connection():
+    """เชื่อมต่อกับ SQLite Database"""
     conn = sqlite3.connect(DB_NAME)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+
+def init_db():
+    """สร้างตาราง items ใน SQLite หากยังไม่มี"""
+    conn = get_db_connection()
     cursor = conn.cursor()
+    cursor.execute("PRAGMA journal_mode=WAL;")  # เพิ่มประสิทธิภาพอ่าน-เขียน
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS items (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -25,7 +36,7 @@ def init_db():
             source_type TEXT NOT NULL,
             source_detail TEXT,
             gender TEXT NOT NULL,
-            image_url TEXT NOT NULL UNIQUE,
+            image_url TEXT UNIQUE NOT NULL,
             source_url TEXT,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
@@ -35,10 +46,12 @@ def init_db():
 
 
 def run_hourly_scraping_job():
-    """ฟังก์ชัน Background Job สำหรับสแกนข้อมูลอัตโนมัติ"""
+    """Background Job สำหรับสแกนข้อมูลอัตโนมัติทุก 1 ชั่วโมง"""
     global is_scraping_running
     if is_scraping_running:
-        print("⏳ [Background Job] สแกนรอบก่อนหน้านี้ยังไม่เสร็จ ข้ามรอบนี้ไป...")
+        print(
+            "⏳ [Background Job] สแกนรอบก่อนหน้านี้ยังไม่เสร็จ ข้ามรอบนี้ไป..."
+        )
         return
 
     print("⏰ [Background Job] กำลังเริ่มดึงข้อมูลโปรโมชันและกิจกรรม...")
@@ -54,7 +67,7 @@ def run_hourly_scraping_job():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # 1. เริ่มต้นระบบและสร้าง Database
+    # 1. เริ่มต้นระบบและสร้าง Database Table
     init_db()
 
     # 2. ตั้งเวลาสแกนอัตโนมัติทุกๆ 1 ชั่วโมง
@@ -83,10 +96,9 @@ app.add_middleware(
 
 
 def classify_source_type(text: str) -> str:
-    """จำแนกหมวดหมู่ที่มาของไอเทม (เพิ่ม Daily Login และ Refill)"""
+    """จำแนกหมวดหมู่ที่มาของไอเทม"""
     text = text.lower()
 
-    # 1. Daily Login (กิจกรรมล็อกอินรายวัน / เช็คชื่อ)
     if any(
         k in text
         for k in [
@@ -102,8 +114,6 @@ def classify_source_type(text: str) -> str:
         ]
     ):
         return "Daily Login"
-
-    # 2. Refill (โปรโมชัน Refill / รีฟิล)
     elif any(
         k in text
         for k in [
@@ -116,8 +126,6 @@ def classify_source_type(text: str) -> str:
         ]
     ):
         return "Refill"
-
-    # 3. Golden Gacha
     elif any(
         k in text
         for k in [
@@ -130,8 +138,6 @@ def classify_source_type(text: str) -> str:
         ]
     ):
         return "Golden Gacha"
-
-    # 4. Gacha
     elif any(
         k in text
         for k in [
@@ -144,14 +150,10 @@ def classify_source_type(text: str) -> str:
         ]
     ):
         return "Gacha"
-
-    # 5. สอยดาว
     elif any(
         k in text for k in ["สอยดาว", "หมุนดาว", "สุ่มดาว", "star promotion"]
     ):
         return "สอยดาว"
-
-    # 6. TopUp (เติมเงินประเภทอื่นๆ)
     elif any(
         k in text
         for k in [
@@ -164,8 +166,6 @@ def classify_source_type(text: str) -> str:
         ]
     ):
         return "TopUp"
-
-    # 7. Bonus Time
     elif any(
         k in text
         for k in [
@@ -179,8 +179,6 @@ def classify_source_type(text: str) -> str:
         ]
     ):
         return "Bonus Time"
-
-    # 8. Web Shop
     elif any(
         k in text
         for k in [
@@ -195,8 +193,6 @@ def classify_source_type(text: str) -> str:
         ]
     ):
         return "Web Shop"
-
-    # 9. กิจกรรมฟรี
     elif any(
         k in text for k in ["กิจกรรม", "event", "แจกฟรี", "สะสมรอบเต้น", "เต้นแลก"]
     ):
@@ -205,52 +201,79 @@ def classify_source_type(text: str) -> str:
     return "โปรโมชันพิเศษ"
 
 
-def classify_category(text: str) -> str:
-    text = text.lower()
-    if any(k in text for k in ["ผม", "hair", "ทรงผม", "hairstyle"]):
-        return "ทรงผม"
-    elif any(k in text for k in ["หน้า", "face", "ใบหน้า", "ตาสี"]):
-        return "ใบหน้า"
-    elif any(
-        k in text
-        for k in ["เสื้อ", "top", "แจ็คเก็ต", "สูท", "เชิ้ต", "t-shirt", "shirt"]
-    ):
-        return "เสื้อ"
-    elif any(
-        k in text
-        for k in ["กางเกง", "กระโปรง", "pants", "skirt", "bottom", "ขา"]
-    ):
-        return "กางเกง/กระโปรง"
-    elif any(k in text for k in ["รองเท้า", "shoes", "boots", "ส้นสูง"]):
-        return "รองเท้า"
-    elif any(
-        k in text
-        for k in [
-            "ปีก",
-            "wing",
-            "กะโหลก",
-            "แท่น",
-            "เอฟเฟกต์",
-            "เพ็ท",
-            "สัตว์เลี้ยง",
-            "ถือ",
-            "กระเป๋า",
-            "คทา",
-            "บัฟ",
-        ]
-    ):
-        return "เครื่องประดับ"
-    return "ชุดแฟชั่น"
+def parse_items_from_text(text: str):
+    """
+    ฟังก์ชันสกัดชื่อไอเทม เพศ และหมวดหมู่จากบรรทัดข้อความ
+    รองรับทั้งแบบ Daily Login (• item ผู้ชาย – ...), Refill, และโปรโมชันปกติ
+    """
+    items_found = []
+    clean_text = text.replace("\xa0", " ").strip()
+
+    # ตรวจจับคำระบุเพศ
+    gender_match = re.search(
+        r"(?:item\s*)?(?:ไอเทม\s*)?(ผู้ชาย|ผู้หญิง|ชาย|หญิง)",
+        clean_text,
+        re.IGNORECASE,
+    )
+    if not gender_match:
+        return items_found
+
+    raw_gender = gender_match.group(1)
+    gender = "ชาย" if "ชาย" in raw_gender else "หญิง"
+
+    # ตัดสัญลักษณ์หน้าและคำระบุเพศออก เหลือเฉพาะชื่อไอเทม
+    content = re.sub(r"^[•\-\s]*", "", clean_text)
+    content = re.sub(
+        r"^(?:item\s*)?(?:ไอเทม\s*)?(?:ผู้ชาย|ผู้หญิง|ชาย|หญิง)\s*[\:–\-]?\s*",
+        "",
+        content,
+        flags=re.IGNORECASE,
+    ).strip()
+
+    if not content:
+        return items_found
+
+    # แยกไอเทมหลายชิ้นในบรรทัดเดียวกันด้วยเครื่องหมาย /
+    sub_items = [item.strip() for item in content.split("/") if item.strip()]
+
+    for raw_name in sub_items:
+        category = "ชุดแฟชั่น"
+        if any(k in raw_name for k in ["ทรงผม", "Hair", "ผม"]):
+            category = "ทรงผม"
+        elif any(k in raw_name for k in ["หน้า", "Face"]):
+            category = "ใบหน้า"
+        elif any(k in raw_name for k in ["เสื้อ", "Top", "Shirt", "T-shirt"]):
+            category = "เสื้อ"
+        elif any(
+            k in raw_name
+            for k in ["กางเกง", "กระโปรง", "Pants", "Skirt", "Bottom"]
+        ):
+            category = "กางเกง/กระโปรง"
+        elif any(k in raw_name for k in ["รองเท้า", "Shoes", "Boots"]):
+            category = "รองเท้า"
+        elif any(
+            k in raw_name for k in ["ปีก", "เครื่องประดับ", "Wing", "Accessory"]
+        ):
+            category = "เครื่องประดับ"
+        elif any(
+            k in raw_name
+            for k in ["เซต", "Uniform", "Set", "Couple", "ชุดแต่งกาย"]
+        ):
+            category = "เซตเสื้อผ้า"
+
+        items_found.append(
+            {"name": raw_name, "gender": gender, "category": category}
+        )
+
+    return items_found
 
 
 def scrape_article_detail_sync(page, article_url: str, article_title: str):
-    init_db()
-    conn = sqlite3.connect(DB_NAME)
+    """สแกนรายละเอียดภายในบทความและบันทึกลง Database"""
+    conn = get_db_connection()
     cursor = conn.cursor()
 
     source_type = classify_source_type(f"{article_title} {article_url}")
-
-    # ปรับปรุงคำขยะ ไม่ให้กรองคำว่า login หรือ refill ออกไป
     junk_keywords = [
         "download",
         "register",
@@ -262,133 +285,70 @@ def scrape_article_detail_sync(page, article_url: str, article_title: str):
         "header",
         "footer",
         "sidebar",
-        "menu",
         "qr",
-        "qrcode",
         "truemoney",
         "promptpay",
         "facebook",
         "line",
-        "share",
-        "itemcode",
-        "topup_btn",
-        "ปุ่ม",
-        "แบนเนอร์",
-        "สแกน",
     ]
 
     saved_count = 0
     try:
-        page.goto(article_url, wait_until="domcontentloaded", timeout=25000)
+        page.goto(article_url, wait_until="domcontentloaded", timeout=30000)
         page.wait_for_timeout(1000)
 
-        # เพิ่ม Selector ให้ดึงรูปจากตารางกิจกรรม Daily Login / Refill ได้ทั่วถึงขึ้น
-        images = page.query_selector_all(
-            ".entry-content table img, .post-content table img, article table img, .entry-content .aligncenter img, .post-content img"
+        # สแกนหาข้อความและรูปภาพในโครงสร้าง Daily Login / Refill / โปรปกติ
+        elements = page.query_selector_all(
+            ".entry-content p, .entry-content td, .entry-content li, article p, article td, article li"
         )
 
-        item_count = 0
-        for img in images:
-            src = img.get_attribute("src") or img.get_attribute("data-src")
-            if not src or ".gif" in src.lower():
-                continue
+        for el in elements:
+            text = el.inner_text().strip()
 
-            src_lower = src.lower()
-            if any(j in src_lower for j in junk_keywords):
-                continue
+            if any(k in text for k in ["ชาย", "หญิง", "ผู้ชาย", "ผู้หญิง"]):
+                parsed_items = parse_items_from_text(text)
 
-            full_img_url = urllib.parse.urljoin(article_url, src)
+                if not parsed_items:
+                    continue
 
-            right_col_info = None
-            try:
-                right_col_info = img.evaluate("""el => {
-                    let td = el.closest('td');
-                    if (td && td.nextElementSibling) {
-                        return td.nextElementSibling.innerText.trim();
-                    }
-                    if (td) return td.innerText.trim();
-                    return "";
-                }""")
-            except:
-                pass
+                # ค้นหารูปภาพใกล้เคียงไอเทมชิ้นนั้น
+                img_url = ""
+                try:
+                    img_el = el.query_selector("img")
+                    if not img_el:
+                        img_el = el.evaluate_handle(
+                            "el => el.previousElementSibling?.querySelector('img') || el.nextElementSibling?.querySelector('img') || el.closest('tr')?.querySelector('img')"
+                        )
 
-            names_list = []
-            genders_found = set()
-            categories_found = set()
+                    if img_el:
+                        src = img_el.get_attribute("src") or img_el.get_attribute(
+                            "data-src"
+                        )
+                        if src and not any(j in src.lower() for j in junk_keywords):
+                            img_url = urllib.parse.urljoin(article_url, src)
+                except:
+                    pass
 
-            if right_col_info and len(right_col_info) > 2:
-                lines = [
-                    line.strip()
-                    for line in right_col_info.split("\n")
-                    if line.strip()
-                ]
-                for line in lines:
-                    if "ผู้ชาย" in line or "ชาย" in line:
-                        genders_found.add("ชาย")
-                        continue
-                    elif "ผู้หญิง" in line or "หญิง" in line:
-                        genders_found.add("หญิง")
-                        continue
+                if not img_url:
+                    continue
 
-                    if line.startswith("(") and line.endswith(")"):
-                        cat = classify_category(line)
-                        if cat != "ชุดแฟชั่น":
-                            categories_found.add(cat)
-                        continue
-
-                    if len(line) >= 3 and not any(
-                        j in line.lower() for j in junk_keywords
-                    ):
-                        if line not in names_list:
-                            names_list.append(line)
-                            cat = classify_category(line)
-                            if cat != "ชุดแฟชั่น":
-                                categories_found.add(cat)
-
-            if names_list:
-                final_name = " / ".join(names_list)
-            else:
-                alt = (
-                    img.get_attribute("alt") or img.get_attribute("title") or ""
-                ).strip()
-                if not alt or alt == article_title:
-                    item_count += 1
-                    final_name = f"{article_title} (ไอเทมชุดที่ {item_count})"
-                else:
-                    final_name = alt
-
-            if "ชาย" in genders_found and "หญิง" in genders_found:
-                final_gender = "ชาย/หญิง"
-            elif "ชาย" in genders_found:
-                final_gender = "ชาย"
-            elif "หญิง" in genders_found:
-                final_gender = "หญิง"
-            else:
-                final_gender = "ทั้งหมด"
-
-            if len(categories_found) == 1:
-                final_category = list(categories_found)[0]
-            elif len(categories_found) > 1:
-                final_category = "เซตเสื้อผ้า"
-            else:
-                final_category = classify_category(final_name)
-
-            cursor.execute(
-                """
-                INSERT OR REPLACE INTO items (name, category, source_type, source_detail, gender, image_url, source_url)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-            """,
-                (
-                    final_name,
-                    final_category,
-                    source_type,
-                    article_title,
-                    final_gender,
-                    full_img_url,
-                    article_url,
-                ),
-            )
-            saved_count += 1
+                for item in parsed_items:
+                    cursor.execute(
+                        """
+                        INSERT OR REPLACE INTO items (name, category, source_type, source_detail, gender, image_url, source_url)
+                        VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """,
+                        (
+                            item["name"],
+                            item["category"],
+                            source_type,
+                            article_title,
+                            item["gender"],
+                            img_url,
+                            article_url,
+                        ),
+                    )
+                    saved_count += 1
 
         conn.commit()
     except Exception as e:
@@ -529,8 +489,7 @@ def get_items(
     page: int = Query(1, ge=1),
     limit: int = Query(20, ge=1, le=100),
 ):
-    init_db()
-    conn = sqlite3.connect(DB_NAME)
+    conn = get_db_connection()
     cursor = conn.cursor()
 
     count_query = "SELECT COUNT(*) FROM items WHERE 1=1"
@@ -567,33 +526,38 @@ def get_items(
     total_items = cursor.fetchone()[0]
 
     order_direction = "DESC" if sort.lower() == "desc" else "ASC"
-
     offset = (page - 1) * limit
     query += f" ORDER BY id {order_direction} LIMIT ? OFFSET ?"
     params.extend([limit, offset])
 
     cursor.execute(query, params)
     rows = cursor.fetchall()
+
     conn.close()
 
-    return {
-        "items": [
-            {
-                "id": r[0],
-                "name": r[1],
-                "category": r[2],
-                "sourceType": r[3],
-                "detail": r[4],
-                "gender": r[5],
-                "img": r[6],
-                "url": r[7],
-            }
-            for r in rows
-        ],
-        "total": total_items,
-        "page": page,
-        "totalPages": (total_items + limit - 1) // limit,
-    }
+    response = JSONResponse(
+        content={
+            "items": [
+                {
+                    "id": r["id"],
+                    "name": r["name"],
+                    "category": r["category"],
+                    "sourceType": r["source_type"],
+                    "detail": r["source_detail"],
+                    "gender": r["gender"],
+                    "img": r["image_url"],
+                    "url": r["source_url"],
+                }
+                for r in rows
+            ],
+            "total": total_items,
+            "page": page,
+            "totalPages": (total_items + limit - 1) // limit,
+        }
+    )
+
+    response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    return response
 
 
 @app.get("/api/scrape-stream")
